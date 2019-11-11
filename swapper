@@ -1,0 +1,61 @@
+#!/bin/sh
+
+usage_exit() {
+  echo "Usage: $0 action [-a] [-c VAL] <Swap File>"
+  echo ""
+  echo "  action:"
+  echo "    on         create swapfile"
+  echo "    off        remove swapfile"
+  echo ""
+  echo "  options:"
+  echo "    -a         auto swap... write /etc/fstab"
+  echo "    -c VAL     count 1M... if c option is 1024, swap size is 1G"
+  echo "    -h         help"
+  exit 1
+}
+
+swapper_on () {
+  dd if=/dev/zero of=${SWAP_FILE} bs=1M count=${SWAP_COUNT:-1024}
+  chmod 600 ${SWAP_FILE}
+  mkswap ${SWAP_FILE}
+  swapon ${SWAP_FILE}
+  if [ ${AUTO_SWAP:-0} -eq 1 ]; then
+    cp /etc/fstab /etc/fstab.$(date +%Y%m%d%H%M%S)
+    echo "${SWAP_FILE}  swap        swap    defaults        0   0" >> /etc/fstab
+  fi
+}
+
+swapper_off () {
+  swapoff ${SWAP_FILE}
+  if [ ${AUTH_SWAP:-0} -eq 1 ]; then
+    cp /etc/fstab /etc/fstab.$(date +%Y%m%d%H%M%S)
+    sed -e "/^${SWAP_FILE}  swap        swap    defaults        0   0$/d" /etc/fstab > /etc/fstab
+  fi
+  rm ${SWAP_FILE}
+}
+
+SUBCMD=$1
+shift
+while getopts ac:h OPT
+do
+  case $OPT in
+    a)  AUTO_SWAP=1
+      ;;
+    c)  SWAP_COUNT=$OPTARG
+      ;;
+    h)  usage_exit
+      ;;
+    \?) usage_exit
+      ;;
+  esac
+done
+shift $((OPTIND - 1))
+SWAP_FILE=$1
+shift
+
+if [ ${SUBCMD} == "on" ] || [ ${SUBCMD} == "off" ]; then
+  swapper_${SUBCMD} "$@"
+  swapon -s
+else
+  usage_exit
+fi
